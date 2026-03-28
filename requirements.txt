@@ -1,6 +1,6 @@
-requests==2.31.0
-pandas==2.1.4
-python-dotenv==1.0.0
-supabase==2.4.0
-Flask==3.0.2
-python-telegram-bot==21.0.1
+requests
+pandas
+python-dotenv
+supabase
+Flask
+python-telegram-bot

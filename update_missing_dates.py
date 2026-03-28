@@ -10,6 +10,42 @@ load_dotenv()
 BASE_URL = "https://api.ouraring.com/v2"
 START_DATE = "2026-02-01"
 
+READINESS_MAP = {
+    "activity_balance": "activity_balance",
+    "body_temperature": "body_temp",
+    "hrv_balance": "hrv_balance",
+    "previous_day_activity": "prev_day",
+    "previous_night": "prev_night",
+    "recovery_index": "recovery",
+    "resting_heart_rate": "resting_hr",
+    "sleep_balance": "sleep_balance",
+}
+
+SLEEP_MAP = {
+    "deep_sleep": "deep",
+    "efficiency": "efficiency",
+    "latency": "latency",
+    "rem_sleep": "rem",
+    "restfulness": "restfulness",
+    "timing": "timing",
+    "total_sleep": "total",
+}
+
+ACTIVITY_MAP = {
+    "meet_daily_targets": "meet_targets",
+    "move_every_hour": "move_hour",
+    "recovery_time": "recovery",
+    "stay_active": "stay_active",
+    "training_frequency": "train_freq",
+    "training_volume": "train_vol",
+}
+
+RESILIENCE_MAP = {
+    "sleep_recovery": "sleep",
+    "daytime_recovery": "daytime",
+    "stress": "stress",
+}
+
 ENDPOINTS = {
     "daily_readiness": "/usercollection/daily_readiness",
     "daily_sleep": "/usercollection/daily_sleep",
@@ -31,6 +67,10 @@ def fetch_endpoint(oura_pat: str, endpoint: str, start_date: str, end_date: str)
     return response.json().get("data", [])
 
 
+def _int(v):
+    return int(v) if v is not None else None
+
+
 def build_day_fields(date: str, oura_pat: str) -> dict:
     """Собирает все поля для одного дня из всех эндпоинтов."""
     fields = {}
@@ -40,36 +80,42 @@ def build_day_fields(date: str, oura_pat: str) -> dict:
     if data:
         r = data[0]
         fields.update({
-            "readiness_score": r.get("score"),
+            "readiness_score": _int(r.get("score")),
             "temperature_deviation": r.get("temperature_deviation"),
             "temperature_trend_deviation": r.get("temperature_trend_deviation"),
         })
         for k, v in (r.get("contributors") or {}).items():
-            fields[f"readiness_{k}_score"] = v
+            col = READINESS_MAP.get(k)
+            if col:
+                fields[f"readiness_{col}_score"] = _int(v)
 
     # daily_sleep
     data = fetch_endpoint(oura_pat, ENDPOINTS["daily_sleep"], date, date)
     if data:
         r = data[0]
-        fields["sleep_score"] = r.get("score")
+        fields["sleep_score"] = _int(r.get("score"))
         for k, v in (r.get("contributors") or {}).items():
-            fields[f"sleep_{k}_score"] = v
+            col = SLEEP_MAP.get(k)
+            if col:
+                fields[f"sleep_{col}_score"] = _int(v)
 
     # daily_activity
     data = fetch_endpoint(oura_pat, ENDPOINTS["daily_activity"], date, date)
     if data:
         r = data[0]
         fields.update({
-            "activity_score": r.get("score"),
-            "steps": r.get("steps"),
-            "active_calories": r.get("active_calories"),
-            "total_calories": r.get("total_calories"),
-            "walking_distance": r.get("equivalent_walking_distance"),
-            "high_activity_time": r.get("high_activity_time"),
-            "sedentary_time": r.get("sedentary_time"),
+            "activity_score": _int(r.get("score")),
+            "steps": _int(r.get("steps")),
+            "active_calories": _int(r.get("active_calories")),
+            "total_calories": _int(r.get("total_calories")),
+            "walking_distance": _int(r.get("equivalent_walking_distance")),
+            "high_activity_time": _int(r.get("high_activity_time")),
+            "sedentary_time": _int(r.get("sedentary_time")),
         })
         for k, v in (r.get("contributors") or {}).items():
-            fields[f"activity_{k}_score"] = v
+            col = ACTIVITY_MAP.get(k)
+            if col:
+                fields[f"activity_{col}_score"] = _int(v)
 
     # daily_stress
     data = fetch_endpoint(oura_pat, ENDPOINTS["daily_stress"], date, date)
@@ -87,7 +133,9 @@ def build_day_fields(date: str, oura_pat: str) -> dict:
         r = data[0]
         fields["resilience_level"] = r.get("level")
         for k, v in (r.get("contributors") or {}).items():
-            fields[f"resilience_{k}_score"] = v
+            col = RESILIENCE_MAP.get(k)
+            if col:
+                fields[f"resilience_{col}_score"] = _int(v)
 
     # sleep (детальные данные)
     data = fetch_endpoint(oura_pat, ENDPOINTS["sleep"], date, date)
@@ -96,18 +144,18 @@ def build_day_fields(date: str, oura_pat: str) -> dict:
     if long_sleeps:
         s = long_sleeps[0]
         fields.update({
-            "average_heart_rate": s.get("average_heart_rate"),
-            "lowest_heart_rate": s.get("lowest_heart_rate"),
-            "average_hrv": s.get("average_hrv"),
+            "average_heart_rate": _int(s.get("average_heart_rate")),
+            "lowest_heart_rate": _int(s.get("lowest_heart_rate")),
+            "average_hrv": _int(s.get("average_hrv")),
             "average_breath": s.get("average_breath"),
-            "efficiency": s.get("efficiency"),
-            "latency": s.get("latency"),
-            "time_in_bed": s.get("time_in_bed"),
-            "total_sleep_duration": s.get("total_sleep_duration"),
-            "awake_time": s.get("awake_time"),
-            "light_sleep_duration": s.get("light_sleep_duration"),
-            "deep_sleep_duration": s.get("deep_sleep_duration"),
-            "rem_sleep_duration": s.get("rem_sleep_duration"),
+            "efficiency": _int(s.get("efficiency")),
+            "latency": _int(s.get("latency")),
+            "time_in_bed": _int(s.get("time_in_bed")),
+            "total_sleep_duration": _int(s.get("total_sleep_duration")),
+            "awake_time": _int(s.get("awake_time")),
+            "light_sleep_duration": _int(s.get("light_sleep_duration")),
+            "deep_sleep_duration": _int(s.get("deep_sleep_duration")),
+            "rem_sleep_duration": _int(s.get("rem_sleep_duration")),
         })
     if short_sleeps:
         fields["nap_count"] = len(short_sleeps)
