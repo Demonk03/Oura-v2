@@ -1,6 +1,14 @@
 # Oura-v2
 
-Multi-user health data tracker based on Oura Ring API. Stores data in Supabase, sends analysis via Telegram bot.
+Oura-v2 — personal health tracker for Oura Ring users.
+
+Connects to the Oura API, stores daily health data in Supabase,
+and delivers insights via Telegram:
+
+- Daily alerts when key metrics (HRV, readiness, sleep score) deviate from your personal baseline
+- Weekly AI-generated digest with trends and patterns
+
+Each user self-registers via Telegram bot using their Oura Personal Access Token.
 
 ## Architecture
 
