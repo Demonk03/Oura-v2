@@ -96,7 +96,7 @@ def webhook():
     if text.startswith("/register"):
         parts = text.split(maxsplit=1)
         if len(parts) < 2:
-            send_message(chat_id, "Использование: /register <oura_token>")
+            send_message(chat_id, "Использование: /register <oura_token>\n\nПолучить токен: https://cloud.ouraring.com/personal-access-tokens")
         else:
             handle_register(chat_id, parts[1].strip())
 
