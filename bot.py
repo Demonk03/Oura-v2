@@ -83,7 +83,7 @@ def handle_stop(chat_id: int) -> None:
     send_message(chat_id, "Отключено. Данные больше не собираются. /register чтобы включить снова.")
 
 
-@app.route(f"/{TG_TOKEN}", methods=["POST"])
+@app.route("/webhook", methods=["POST"])
 def webhook():
     update = request.get_json()
     message = update.get("message", {})
