@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 import os
+import hmac
+import hashlib
+import time
+import jwt
 import requests
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 import db
 
 load_dotenv()
 
 TG_TOKEN = os.getenv("TG_TOKEN")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
+DASHBOARD_ORIGIN = os.getenv("DASHBOARD_ORIGIN", "https://demonk03.github.io")
 OURA_BASE_URL = "https://api.ouraring.com/v2"
 
 OURA_TOKEN_KEYBOARD = {
@@ -17,6 +23,51 @@ OURA_TOKEN_KEYBOARD = {
 }
 
 app = Flask(__name__)
+
+
+# ── CORS helper ───────────────────────────────────────────────
+def _cors(response):
+    response.headers["Access-Control-Allow-Origin"] = DASHBOARD_ORIGIN
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
+
+@app.after_request
+def after_request(response):
+    return _cors(response)
+
+
+# ── Telegram auth helpers ─────────────────────────────────────
+def _verify_telegram_hash(data: dict) -> bool:
+    """Проверяет подпись данных от Telegram Login Widget."""
+    check_hash = data.get("hash")
+    if not check_hash:
+        return False
+
+    fields = {k: v for k, v in data.items() if k != "hash"}
+    data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(fields.items()))
+
+    secret = hashlib.sha256(TG_TOKEN.encode()).digest()
+    computed = hmac.new(secret, data_check_string.encode(), hashlib.sha256).hexdigest()
+
+    if abs(int(time.time()) - int(data.get("auth_date", 0))) > 86400:
+        return False
+
+    return hmac.compare_digest(computed, check_hash)
+
+
+def _generate_jwt(user_id: str) -> str:
+    """Генерирует Supabase-совместимый JWT для пользователя."""
+    now = int(time.time())
+    payload = {
+        "sub": user_id,
+        "role": "authenticated",
+        "iss": "supabase",
+        "iat": now,
+        "exp": now + 7 * 24 * 3600,  # 7 дней
+    }
+    return jwt.encode(payload, SUPABASE_JWT_SECRET, algorithm="HS256")
 
 
 def send_message(chat_id: int, text: str) -> None:
@@ -123,6 +174,36 @@ def handle_stop(chat_id: int) -> None:
         return
     db.deactivate_user(chat_id)
     send_message(chat_id, "Отключено. Данные больше не собираются. /register чтобы включить снова.")
+
+
+@app.route("/auth/telegram", methods=["POST", "OPTIONS"])
+def auth_telegram():
+    if request.method == "OPTIONS":
+        return "", 204
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
+
+    if not _verify_telegram_hash(dict(data)):
+        return jsonify({"error": "Invalid signature"}), 401
+
+    telegram_id = int(data["id"])
+    user = db.get_user_by_telegram_id(telegram_id)
+
+    if not user or not user.get("is_active"):
+        return jsonify({
+            "error": "User not registered. Use @good_morning_oura_bot to sign up."
+        }), 404
+
+    token = _generate_jwt(user["id"])
+    return jsonify({
+        "token": token,
+        "user": {
+            "name": data.get("first_name", ""),
+            "telegram_id": telegram_id,
+        }
+    })
 
 
 @app.route("/webhook", methods=["POST"])

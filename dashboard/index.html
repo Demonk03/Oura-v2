@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Oura Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+</head>
+<body class="theme-dark">
+  <a class="skip-link" href="#main">Перейти к содержимому</a>
+
+  <div class="app">
+
+    <header class="page-header" role="banner">
+      <div class="header-card">
+        <div class="header-inner">
+          <div>
+            <h1 class="header-title">Oura Dashboard</h1>
+            <p class="header-subtitle" id="current-date">—</p>
+            <div class="date-filter-wrap">
+              <select id="date-filter" class="date-select" aria-label="Выбрать дату">
+                <option>Загрузка...</option>
+              </select>
+            </div>
+          </div>
+          <div class="header-actions">
+            <span class="header-user" id="user-name"></span>
+            <button class="header-logout" id="logout-btn" type="button">Выйти</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main id="main" class="page" role="main">
+
+      <!-- Alert banner -->
+      <div class="alert-banner" id="alert-banner" hidden role="alert" aria-live="polite">
+        <p class="alert-label">Алерт сегодня</p>
+        <p class="alert-text" id="alert-text"></p>
+      </div>
+
+      <!-- KPI -->
+      <section class="kpi" aria-labelledby="kpi-title">
+        <header class="section-header">
+          <h2 id="kpi-title" class="section-title">Показатели</h2>
+          <p class="section-meta" id="kpi-meta">Последние доступные данные</p>
+        </header>
+
+        <ul class="kpi-grid" role="list">
+          <li class="kpi-item">
+            <article class="kpi-card" aria-label="Readiness">
+              <div class="kpi-circle" aria-hidden="true">
+                <div class="kpi-ring"></div>
+                <div class="kpi-score" id="readiness-score">--</div>
+              </div>
+              <p class="kpi-label">Readiness</p>
+              <div class="kpi-trend kpi-trend--flat" id="readiness-trend" aria-label="Изменение Readiness">
+                <span class="kpi-trend-arrow" aria-hidden="true">→</span>
+                <span>--</span>
+              </div>
+            </article>
+          </li>
+
+          <li class="kpi-item">
+            <article class="kpi-card" aria-label="Sleep">
+              <div class="kpi-circle" aria-hidden="true">
+                <div class="kpi-ring"></div>
+                <div class="kpi-score" id="sleep-score">--</div>
+              </div>
+              <p class="kpi-label">Sleep</p>
+              <div class="kpi-trend kpi-trend--flat" id="sleep-trend" aria-label="Изменение Sleep">
+                <span class="kpi-trend-arrow" aria-hidden="true">→</span>
+                <span>--</span>
+              </div>
+            </article>
+          </li>
+
+          <li class="kpi-item">
+            <article class="kpi-card" aria-label="Activity">
+              <div class="kpi-circle" aria-hidden="true">
+                <div class="kpi-ring"></div>
+                <div class="kpi-score" id="activity-score">--</div>
+              </div>
+              <p class="kpi-label">Activity</p>
+              <div class="kpi-trend kpi-trend--flat" id="activity-trend" aria-label="Изменение Activity">
+                <span class="kpi-trend-arrow" aria-hidden="true">→</span>
+                <span>--</span>
+              </div>
+            </article>
+          </li>
+
+          <li class="kpi-item">
+            <article class="kpi-card" aria-label="Stress">
+              <div class="kpi-circle" aria-hidden="true">
+                <div class="kpi-ring"></div>
+                <div class="kpi-score" id="stress-score">--</div>
+              </div>
+              <p class="kpi-label">Stress</p>
+              <div class="kpi-trend kpi-trend--flat" id="stress-trend" aria-label="Изменение Stress">
+                <span class="kpi-trend-arrow" aria-hidden="true">→</span>
+                <span>--</span>
+              </div>
+            </article>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Weekly recap -->
+      <section aria-labelledby="recap-title">
+        <header class="section-header">
+          <h2 id="recap-title" class="section-title">Итоги недели</h2>
+        </header>
+        <div class="recap-card">
+          <p class="recap-label">AI-анализ</p>
+          <p class="recap-text" id="recap-text">Загрузка...</p>
+          <p class="recap-date" id="recap-date"></p>
+        </div>
+      </section>
+
+      <!-- Charts -->
+      <section class="charts" aria-labelledby="charts-title">
+        <header class="section-header">
+          <h2 id="charts-title" class="section-title">Графики</h2>
+        </header>
+
+        <div class="range-filters" role="group" aria-label="Диапазон отображения">
+          <button class="chip" type="button" data-days="7">7 дней</button>
+          <button class="chip active" type="button" data-days="30">30 дней</button>
+          <button class="chip" type="button" data-days="0">Всё время</button>
+        </div>
+
+        <div class="charts-grid">
+          <article class="chart-card" aria-labelledby="readiness-chart-title">
+            <header class="chart-header">
+              <h3 id="readiness-chart-title" class="chart-title">Readiness</h3>
+            </header>
+            <div class="chart-area" role="img" aria-label="График Readiness">
+              <canvas id="readiness-canvas"></canvas>
+            </div>
+          </article>
+
+          <article class="chart-card" aria-labelledby="sleep-chart-title">
+            <header class="chart-header">
+              <h3 id="sleep-chart-title" class="chart-title">Sleep</h3>
+            </header>
+            <div class="chart-area" role="img" aria-label="График Sleep">
+              <canvas id="sleep-canvas"></canvas>
+            </div>
+          </article>
+
+          <article class="chart-card" aria-labelledby="activity-chart-title">
+            <header class="chart-header">
+              <h3 id="activity-chart-title" class="chart-title">Activity</h3>
+            </header>
+            <div class="chart-area" role="img" aria-label="График Activity">
+              <canvas id="activity-canvas"></canvas>
+            </div>
+          </article>
+
+          <article class="chart-card" aria-labelledby="stress-chart-title">
+            <header class="chart-header">
+              <h3 id="stress-chart-title" class="chart-title">Stress (мин высокого)</h3>
+            </header>
+            <div class="chart-area" role="img" aria-label="График Stress">
+              <canvas id="stress-canvas"></canvas>
+            </div>
+          </article>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="page-footer" role="contentinfo">
+      <p class="footer-text">Oura-v2 · данные обновляются ежедневно в 10:00 МСК</p>
+    </footer>
+  </div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Войти — Oura Dashboard</title>
+  <link rel="stylesheet" href="dashboard.css" />
+  <script src="config.js"></script>
+</head>
+<body class="theme-dark">
+  <div class="login-page">
+    <div class="login-card">
+      <div class="login-logo" aria-hidden="true">◎</div>
+
+      <div>
+        <h1 class="login-title">Oura Dashboard</h1>
+        <p class="login-subtitle">Войдите через Telegram, чтобы увидеть свои данные о здоровье</p>
+      </div>
+
+      <div class="login-widget-wrap" id="telegram-widget-container">
+        <script
+          async
+          src="https://telegram.org/js/telegram-widget.js?22"
+          data-telegram-login="good_morning_oura_bot"
+          data-size="large"
+          data-radius="12"
+          data-onauth="onTelegramAuth(user)"
+          data-request-access="write">
+        </script>
+      </div>
+
+      <div id="login-error" style="display:none">
+        <p style="color:#e57070;font-size:13px;margin:0" id="login-error-text"></p>
+      </div>
+
+      <div class="login-divider"></div>
+
+      <p class="login-hint">
+        Нет аккаунта?<br>
+        Напишите <a href="https://t.me/good_morning_oura_bot" target="_blank" rel="noopener">@good_morning_oura_bot</a>
+        и выполните команду <code>/register</code>
+      </p>
+    </div>
+  </div>
+
+  <script>
+    if (localStorage.getItem('oura_jwt')) {
+      window.location.replace('index.html');
+    }
+
+    async function onTelegramAuth(user) {
+      const errorDiv  = document.getElementById('login-error');
+      const errorText = document.getElementById('login-error-text');
+      errorDiv.style.display = 'none';
+
+      try {
+        const res = await fetch(`${RENDER_URL}/auth/telegram`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(user),
+        });
+
+        const json = await res.json();
+
+        if (!res.ok) {
+          errorDiv.style.display = 'block';
+          errorText.textContent = json.error || 'Ошибка авторизации';
+          return;
+        }
+
+        localStorage.setItem('oura_jwt',  json.token);
+        localStorage.setItem('oura_user', JSON.stringify(json.user));
+        window.location.href = 'index.html';
+
+      } catch (e) {
+        errorDiv.style.display = 'block';
+        errorText.textContent = 'Не удалось подключиться к серверу';
+      }
+    }
+  </script>
+</body>
+</html>
