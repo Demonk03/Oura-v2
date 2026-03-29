@@ -9,7 +9,8 @@ Operational reference for setting up and maintaining Oura-v2.
 | Service | Purpose | URL |
 |---|---|---|
 | Supabase | PostgreSQL database | Project URL in `.env` as `SUPABASE_URL` |
-| Render.com | Bot hosting (webhook) | `https://oura-v2.onrender.com` |
+| Render.com | Bot + API hosting | `https://oura-v2.onrender.com` |
+| GitHub Pages | Dashboard frontend | `https://demonk03.github.io/Oura-v2/` |
 | Telegram | Bot delivery | `@good_morning_oura_bot` |
 | GitHub Actions | Scheduled automation | `Demonk03/Oura-v2` |
 | OpenAI | GPT analysis | Key in `.env` as `OPENAI_API_KEY` |
@@ -131,9 +132,10 @@ Auth: `Authorization: Bearer <oura_pat>` header.
 
 **Environment variables to set in Render dashboard:**
 - `SUPABASE_URL`
-- `SUPABASE_KEY` — service_role key
+- `SUPABASE_KEY` — service_role key (`sb_secret_...`)
 - `TG_TOKEN`
 - `OPENAI_API_KEY`
+- `APP_SECRET` — случайная строка для подписи JWT дашборда (32 байта hex). Генерировать: `python3 -c "import secrets; print(secrets.token_hex(32))"`
 
 **Auto-deploy issue:** Auto-deploy from GitHub does not always trigger. If changes don't appear after push — go to Render dashboard → Manual Deploy → Deploy latest commit.
 
@@ -152,7 +154,7 @@ Secrets required in repository settings:
 | Secret | Value |
 |---|---|
 | `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_KEY` | service_role key (not anon) |
+| `SUPABASE_KEY` | service_role key (`sb_secret_...`) |
 | `OPENAI_API_KEY` | OpenAI key |
 | `TG_TOKEN` | Telegram bot token |
 
@@ -168,14 +170,54 @@ All workflows can be triggered manually via `workflow_dispatch` in the Actions t
 
 ---
 
+## Dashboard — How It Works
+
+**URL:** https://demonk03.github.io/Oura-v2/
+
+Статичный фронтенд на GitHub Pages. Данные получает через Flask API на Render — в Supabase напрямую не ходит.
+
+### Авторизация
+
+```
+1. Пользователь открывает login.html
+2. Нажимает кнопку Telegram Login Widget
+3. Telegram подтверждает личность, передаёт данные на /auth/telegram (Render)
+4. bot.py проверяет подпись Telegram (HMAC-SHA256 от TG_TOKEN)
+5. Ищет пользователя в Supabase по telegram_id
+6. Если найден — генерирует JWT подписанный APP_SECRET (HS256, срок 7 дней)
+7. JWT сохраняется в localStorage, пользователь редиректится на index.html
+```
+
+### Загрузка данных
+
+```
+1. dashboard.js читает JWT из localStorage
+2. GET /api/logs?days=90  → Authorization: Bearer <jwt>
+3. GET /api/weekly        → Authorization: Bearer <jwt>
+4. bot.py проверяет JWT через APP_SECRET → достаёт user_id
+5. Запрашивает Supabase с service_role ключом → возвращает JSON
+6. dashboard.js рендерит KPI, графики, weekly recap
+```
+
+### Почему не Supabase напрямую
+
+Supabase использует ES256 (P-256) для подписи JWT. Приватный ключ хранится у Supabase, получить его невозможно. Поэтому фронтенд не может получить токен, который Supabase примет для RLS. Решение — API proxy: бэкенд сам ходит в Supabase с service_role ключом.
+
+### Конфигурация домена для Telegram Widget
+
+В BotFather → Bot Settings → Domain должен быть прописан `demonk03.github.io`. Без этого виджет не отображается.
+
+---
+
 ## Local Development
 
 `.env` file (not committed):
 ```
 SUPABASE_URL=...
-SUPABASE_KEY=...
+SUPABASE_KEY=...       # sb_secret_... (service_role)
 OPENAI_API_KEY=...
 TG_TOKEN=...
+APP_SECRET=...         # python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
 Run data update manually:

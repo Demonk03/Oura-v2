@@ -27,9 +27,24 @@ Oura API → GitHub Actions → Supabase → alert_checker.py → Telegram
                                      → send_telegram_message.py (weekly)
 
 Telegram → Render (bot.py) → Supabase (user registration)
+
+Browser → login.html (Telegram Widget) → Render /auth/telegram → JWT (APP_SECRET)
+Browser → dashboard.js → Render /api/logs, /api/weekly → Supabase → JSON
 ```
 
 Data is collected daily via scheduled GitHub Actions workflows. Each user's Oura token is stored in Supabase — no tokens in code or environment files.
+
+The dashboard authenticates users via Telegram Login Widget. The backend (Render/Flask) issues its own JWT signed with `APP_SECRET` and acts as a proxy to Supabase using the service_role key. The frontend never accesses Supabase directly.
+
+## Dashboard
+
+Available at: https://demonk03.github.io/Oura-v2/
+
+- Login via Telegram — no password needed
+- KPI cards: Readiness, Sleep, Activity, Stress with day-over-day trends
+- Date selector to view any historical day
+- Charts: 7 / 30 / all time range
+- Weekly AI recap block
 
 ## Bot commands
 
