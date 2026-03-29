@@ -121,6 +121,20 @@ Base URL: `https://api.ouraring.com/v2`
 
 Auth: `Authorization: Bearer <oura_pat>` header.
 
+### Известные особенности API
+
+**`daily_activity` — exclusive `end_date`**
+
+Единственный эндпоинт с эксклюзивным `end_date`. При `start_date == end_date` возвращает 0 записей.
+Все остальные эндпоинты (`daily_readiness`, `daily_sleep`, `daily_stress` и др.) используют inclusive `end_date`.
+
+Решение: в `update_missing_dates.py` для `daily_activity` передаётся `end_date = date + 1 day`.
+
+**`daily_stress` — единицы измерения в секундах**
+
+`stress_high` и `recovery_high` возвращаются в **секундах**, не минутах.
+В Supabase хранятся as-is (в секундах). Конвертация секунды → минуты происходит на фронте (`dashboard.js`, функция `secToMin`).
+
 ---
 
 ## Render.com — Bot Deployment
@@ -230,3 +244,23 @@ Run bot locally (for testing):
 python3 bot.py
 ```
 Note: webhook won't work locally without a public URL (use ngrok or test via direct Telegram API calls).
+
+---
+
+## Changelog / Исправленные баги
+
+### 2026-03-29 — Activity chart пустой + Stress в секундах
+
+**Симптом 1:** Чарт Activity не показывал данные, хотя строки в `health_logs` существовали.
+
+**Причина:** `daily_activity` — единственный Oura API эндпоинт с exclusive `end_date`. При запросе `start_date=X, end_date=X` возвращает 0 записей. Из-за этого все поля activity (`activity_score`, `steps`, `active_calories` и др.) писались как `NULL` с самого начала заливки.
+
+**Решение:** В `update_missing_dates.py` для `daily_activity` используется `end_date = date + 1 day`. Дополнительно `get_missing_dates` теперь также включает даты с `activity_score IS NULL` — это позволило перезалить все 56 исторических дат без ручного вмешательства.
+
+---
+
+**Симптом 2:** Чарт Stress показывал значения в секундах (напр. 12600 вместо 210 мин).
+
+**Причина:** Oura API возвращает `stress_high` и `recovery_high` в секундах. Конвертации при записи в Supabase не было.
+
+**Решение:** В `dashboard.js` добавлена функция `secToMin`, применяется везде, где отображается `stress_high`: KPI-карточка, тренд, чарт. Данные в Supabase остались в секундах — конвертация на фронте.
