@@ -8,8 +8,8 @@ import db
 
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-TG_TOKEN = os.getenv("TG_TOKEN")
+OPENAI_API_KEY = (os.getenv("OPENAI_API_KEY") or "").strip()
+TG_TOKEN = (os.getenv("TG_TOKEN") or "").strip()
 BASELINE_DAYS = 30
 
 
@@ -156,7 +156,10 @@ def main():
     users = db.get_active_users()
     print(f"Активных пользователей: {len(users)}")
     for user in users:
-        process_user(user)
+        try:
+            process_user(user)
+        except Exception as e:
+            print(f"[user {user.get('telegram_id')}] Ошибка: {e}")
 
 
 if __name__ == "__main__":
