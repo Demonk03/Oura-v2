@@ -9,43 +9,34 @@ if (!jwt) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// SUPABASE CLIENT
+// API HELPER
 // ─────────────────────────────────────────────────────────────
-const { createClient } = supabase;
-const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  global: { headers: { Authorization: `Bearer ${jwt}` } },
-  auth:   { autoRefreshToken: false, persistSession: false },
-});
+async function apiFetch(path) {
+  const res = await fetch(RENDER_URL + path, {
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+  if (res.status === 401) {
+    localStorage.removeItem('oura_jwt');
+    localStorage.removeItem('oura_user');
+    window.location.replace('login.html');
+    return null;
+  }
+  return res.json();
+}
 
 // ─────────────────────────────────────────────────────────────
 // DATA FETCHING
 // ─────────────────────────────────────────────────────────────
 async function fetchLogs() {
-  const since = new Date();
-  since.setDate(since.getDate() - 90);
-  const sinceIso = since.toISOString().slice(0, 10);
-
-  const { data, error } = await db
-    .from('health_logs')
-    .select('date,readiness_score,sleep_score,activity_score,stress_high')
-    .gte('date', sinceIso)
-    .order('date', { ascending: true });
-
-  if (error) { console.error('health_logs fetch error', error); return []; }
+  const data = await apiFetch('/api/logs?days=90');
   return data || [];
 }
 
 async function fetchRecap() {
-  const { data, error } = await db
-    .from('weekly_summaries')
-    .select('week_start,weekly_data')
-    .order('week_start', { ascending: false })
-    .limit(1);
-
-  if (error || !data?.length) return null;
-  const row = data[0];
-  const text = row.weekly_data?.summary || row.weekly_data?.text || null;
-  return text ? { text, week_start: row.week_start } : null;
+  const data = await apiFetch('/api/weekly');
+  if (!data || !data.weekly_data) return null;
+  const text = data.weekly_data?.summary || data.weekly_data?.text || null;
+  return text ? { text, week_start: data.week_start } : null;
 }
 
 // ─────────────────────────────────────────────────────────────

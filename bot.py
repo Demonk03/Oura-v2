@@ -12,7 +12,7 @@ import db
 load_dotenv()
 
 TG_TOKEN = os.getenv("TG_TOKEN")
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
+APP_SECRET = os.getenv("APP_SECRET")
 DASHBOARD_ORIGIN = os.getenv("DASHBOARD_ORIGIN", "https://demonk03.github.io")
 OURA_BASE_URL = "https://api.ouraring.com/v2"
 
@@ -28,8 +28,8 @@ app = Flask(__name__)
 # ── CORS helper ───────────────────────────────────────────────
 def _cors(response):
     response.headers["Access-Control-Allow-Origin"] = DASHBOARD_ORIGIN
-    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     return response
 
 
@@ -67,7 +67,16 @@ def _generate_jwt(user_id: str) -> str:
         "iat": now,
         "exp": now + 7 * 24 * 3600,  # 7 дней
     }
-    return jwt.encode(payload, SUPABASE_JWT_SECRET, algorithm="HS256")
+    return jwt.encode(payload, APP_SECRET, algorithm="HS256")
+
+
+def _verify_jwt(token: str) -> str | None:
+    """Верифицирует JWT и возвращает user_id (sub) или None."""
+    try:
+        payload = jwt.decode(token, APP_SECRET, algorithms=["HS256"])
+        return payload.get("sub")
+    except jwt.InvalidTokenError:
+        return None
 
 
 def send_message(chat_id: int, text: str) -> None:
@@ -174,6 +183,35 @@ def handle_stop(chat_id: int) -> None:
         return
     db.deactivate_user(chat_id)
     send_message(chat_id, "Отключено. Данные больше не собираются. /register чтобы включить снова.")
+
+
+@app.route("/api/logs", methods=["GET", "OPTIONS"])
+def api_logs():
+    if request.method == "OPTIONS":
+        return "", 204
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return jsonify({"error": "Unauthorized"}), 401
+    user_id = _verify_jwt(auth[7:])
+    if not user_id:
+        return jsonify({"error": "Invalid token"}), 401
+    days = int(request.args.get("days", 90))
+    logs = db.get_health_logs(user_id, days=days)
+    return jsonify(logs)
+
+
+@app.route("/api/weekly", methods=["GET", "OPTIONS"])
+def api_weekly():
+    if request.method == "OPTIONS":
+        return "", 204
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return jsonify({"error": "Unauthorized"}), 401
+    user_id = _verify_jwt(auth[7:])
+    if not user_id:
+        return jsonify({"error": "Invalid token"}), 401
+    summary = db.get_weekly_summary(user_id)
+    return jsonify(summary or {})
 
 
 @app.route("/auth/telegram", methods=["POST", "OPTIONS"])
