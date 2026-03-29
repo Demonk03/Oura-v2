@@ -99,8 +99,9 @@ def build_day_fields(date: str, oura_pat: str) -> dict:
             if col:
                 fields[f"sleep_{col}_score"] = _int(v)
 
-    # daily_activity
-    data = fetch_endpoint(oura_pat, ENDPOINTS["daily_activity"], date, date)
+    # daily_activity uses exclusive end_date, so +1 day is required
+    next_day = (datetime.strptime(date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    data = fetch_endpoint(oura_pat, ENDPOINTS["daily_activity"], date, next_day)
     if data:
         r = data[0]
         fields.update({
@@ -186,16 +187,18 @@ def build_day_fields(date: str, oura_pat: str) -> dict:
 
 
 def get_missing_dates(user_id: str) -> list[str]:
-    """Возвращает даты от START_DATE до вчера, которых нет в health_logs."""
+    """Возвращает даты от START_DATE до вчера, которых нет в health_logs,
+    а также даты с незаполненными activity-полями."""
     logs = db.get_health_logs(user_id, days=365)
     existing = {r["date"] for r in logs}
+    incomplete = {r["date"] for r in logs if r.get("activity_score") is None}
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
     all_dates = []
     current = datetime.strptime(START_DATE, "%Y-%m-%d")
     end = datetime.strptime(yesterday, "%Y-%m-%d")
     while current <= end:
         d = current.strftime("%Y-%m-%d")
-        if d not in existing:
+        if d not in existing or d in incomplete:
             all_dates.append(d)
         current += timedelta(days=1)
     return all_dates

@@ -174,15 +174,15 @@ function renderKPIForDate(logs, isoDate) {
   set('readiness-score', row.readiness_score);
   set('sleep-score',     row.sleep_score);
   set('activity-score',  row.activity_score);
-  set('stress-score',    row.stress_high);
+  set('stress-score',    secToMin(row.stress_high));
 
   const metaEl = document.getElementById('kpi-meta');
   if (metaEl) metaEl.textContent = `Данные за ${formatDateRu(row.date)}`;
 
-  renderTrend('readiness-trend', delta(row.readiness_score, prev?.readiness_score));
-  renderTrend('sleep-trend',     delta(row.sleep_score,     prev?.sleep_score));
-  renderTrend('activity-trend',  delta(row.activity_score,  prev?.activity_score));
-  renderTrend('stress-trend',    delta(row.stress_high,     prev?.stress_high));
+  renderTrend('readiness-trend', delta(row.readiness_score,       prev?.readiness_score));
+  renderTrend('sleep-trend',     delta(row.sleep_score,           prev?.sleep_score));
+  renderTrend('activity-trend',  delta(row.activity_score,        prev?.activity_score));
+  renderTrend('stress-trend',    delta(secToMin(row.stress_high), secToMin(prev?.stress_high)));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -198,11 +198,13 @@ function renderKPI(logs) {
 // ─────────────────────────────────────────────────────────────
 // CHARTS
 // ─────────────────────────────────────────────────────────────
+const secToMin = v => v != null ? Math.round(v / 60) : null;
+
 const CHART_CONFIGS = [
   { canvas: 'readiness-canvas', field: 'readiness_score', color: '#6fb6d8', maxY: 100 },
   { canvas: 'sleep-canvas',     field: 'sleep_score',     color: '#7d9fd4', maxY: 100 },
   { canvas: 'activity-canvas',  field: 'activity_score',  color: '#5cbf8a', maxY: 100 },
-  { canvas: 'stress-canvas',    field: 'stress_high',     color: '#e57070', maxY: null },
+  { canvas: 'stress-canvas',    field: 'stress_high',     color: '#e57070', maxY: null, transform: secToMin },
 ];
 
 const chartInstances = {};
@@ -278,8 +280,8 @@ function renderCharts(logs, days) {
     return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
   });
 
-  CHART_CONFIGS.forEach(({ canvas, field, color, maxY }) => {
-    const data = slice.map(r => r[field]);
+  CHART_CONFIGS.forEach(({ canvas, field, color, maxY, transform }) => {
+    const data = slice.map(r => transform ? transform(r[field]) : r[field]);
     const existing = chartInstances[canvas];
 
     if (existing) {
