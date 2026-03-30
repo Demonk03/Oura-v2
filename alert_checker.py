@@ -61,8 +61,8 @@ def check_alerts(df: pd.DataFrame) -> list[dict]:
     last_14 = df.tail(14)
     prev_14 = df.tail(28).head(14)
     if len(last_14) == 14 and len(prev_14) == 14:
-        balance_now = float((last_14["stress_high"].fillna(0) - last_14["recovery_high"].fillna(0)).mean())
-        balance_prev = float((prev_14["stress_high"].fillna(0) - prev_14["recovery_high"].fillna(0)).mean())
+        balance_now = float((last_14["stress_high"].fillna(0) - last_14["recovery_high"].fillna(0)).mean()) / 60
+        balance_prev = float((prev_14["stress_high"].fillna(0) - prev_14["recovery_high"].fillna(0)).mean()) / 60
         if balance_prev != 0 and (balance_now - balance_prev) / abs(balance_prev) > 0.15:
             triggered.append({"rule": "stress_balance_worsening", "description": f"Баланс стресс/восстановление ухудшился: {balance_prev:.0f} → {balance_now:.0f} мин/день"})
 
@@ -80,6 +80,8 @@ def build_gpt_prompt(triggered_alerts: list, df: pd.DataFrame, baseline: dict) -
     recent = df[["date", "readiness_score", "sleep_score", "average_heart_rate",
                  "average_hrv", "total_sleep_duration", "rem_sleep_duration",
                  "stress_high", "recovery_high", "temperature_deviation"]].tail(7).copy()
+    recent["stress_high"] = (recent["stress_high"] / 60).round(0)
+    recent["recovery_high"] = (recent["recovery_high"] / 60).round(0)
     recent["date"] = recent["date"].astype(str)
     recent_json = recent.to_json(orient="records", indent=2, force_ascii=False)
     return f"""Ты — персональный health-аналитик. Пользователь носит кольцо Oura.
