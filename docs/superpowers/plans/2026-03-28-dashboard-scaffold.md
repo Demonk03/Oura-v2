@@ -1,5 +1,7 @@
 # Dashboard Scaffold — Implementation Plan
 
+**СТАТУС: ВЫПОЛНЕНО 2026-03-29**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Создать папку `dashboard/` с четырьмя файлами — login.html, index.html, dashboard.css, dashboard.js — работающими на моковых данных, без бэкенда и Supabase.

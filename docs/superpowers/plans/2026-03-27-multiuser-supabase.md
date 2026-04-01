@@ -1,5 +1,7 @@
 # Oura-v2: Мультипользовательская архитектура (Supabase) — Implementation Plan
 
+**СТАТУС: ВЫПОЛНЕНО 2026-03-29**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Создать новый проект Oura-v2 с поддержкой до 5 пользователей — Supabase как БД, Telegram-бот для регистрации, GitHub Actions для сбора данных и уведомлений.
