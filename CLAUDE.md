@@ -1,5 +1,10 @@
 # Oura-v2 — Project Context
 
+## Obsidian-заметка
+`/Users/dkossenkov/Documents/Private files/Second brain/Private_projects/Oura v2.md`
+
+---
+
 ## Что это
 
 Личный health-трекер. Собирает данные с кольца Oura Ring через API, хранит в Supabase (PostgreSQL), отправляет алерты и weekly-дайджест в Telegram через GPT-анализ. Фронтенд — статичный дашборд на GitHub Pages.

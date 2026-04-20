@@ -275,7 +275,7 @@ class GPTTableAnalyzer:
     def _send_request_to_gpt(self, prompt):
         """Общий метод для отправки запроса в GPT API"""
         payload = {
-            "model": "gpt-4",
+            "model": "gpt-4o",
             "messages": [
                 {
                     "role": "user",

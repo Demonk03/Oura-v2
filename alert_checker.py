@@ -107,7 +107,7 @@ def call_gpt(prompt: str) -> str:
     response = requests.post(
         "https://api.openai.com/v1/chat/completions",
         headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
-        json={"model": "gpt-4", "messages": [{"role": "user", "content": prompt}], "max_tokens": 500, "temperature": 0.7},
+        json={"model": "gpt-4o", "messages": [{"role": "user", "content": prompt}], "max_tokens": 500, "temperature": 0.7},
         timeout=30,
     )
     response.raise_for_status()
