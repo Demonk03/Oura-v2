@@ -116,10 +116,10 @@ Secrets в репозитории: `SUPABASE_URL`, `SUPABASE_KEY`, `OPENAI_API_K
 
 ## Известные особенности Oura API
 
-**`daily_activity` — exclusive `end_date`**
+**`daily_activity` и `sleep` — exclusive `end_date`**
 
-Единственный эндпоинт с эксклюзивным `end_date`. При `start_date == end_date` возвращает 0 записей.
-Фикс: в `update_missing_dates.py` для этого эндпоинта `end_date = date + 1 day`.
+Оба эндпоинта с эксклюзивным `end_date`. При `start_date == end_date` возвращают 0 записей.
+Фикс: в `update_missing_dates.py` для обоих эндпоинтов `end_date = date + 1 day` (переменная `next_day`).
 `get_missing_dates` включает даты с `activity_score IS NULL` — позволяет перезалить неполные записи.
 
 **`daily_stress` — секунды, не минуты**

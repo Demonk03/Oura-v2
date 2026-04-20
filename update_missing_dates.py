@@ -139,7 +139,7 @@ def build_day_fields(date: str, oura_pat: str) -> dict:
                 fields[f"resilience_{col}_score"] = _int(v)
 
     # sleep (детальные данные)
-    data = fetch_endpoint(oura_pat, ENDPOINTS["sleep"], date, date)
+    data = fetch_endpoint(oura_pat, ENDPOINTS["sleep"], date, next_day)
     long_sleeps = [s for s in data if s.get("type") == "long_sleep"]
     short_sleeps = [s for s in data if s.get("type") == "short_sleep"]
     if long_sleeps:
