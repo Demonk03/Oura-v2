@@ -1,7 +1,7 @@
 # Oura-v2 — Project Context
 
 ## Obsidian-заметка
-`/Users/dkossenkov/Documents/Private files/Second brain/Private_projects/Oura v2.md`
+`02 Private_projects/Oura v2.md`
 
 ---
 

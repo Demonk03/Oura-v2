@@ -144,7 +144,7 @@ send_message(chat_id, "Команды: /start | /register <oura_token> | /status
 
 - [ ] **Step 1:** Проверить что `bot.py` запускается без ошибок:
 ```bash
-cd "/Users/dkossenkov/Documents/Private files/AI/Oura-v2" && python3 -c "import bot; print('OK')"
+cd "$PROJECT_ROOT" && python3 -c "import bot; print('OK')"
 ```
 Ожидаемый вывод: `OK`
 
@@ -152,7 +152,7 @@ cd "/Users/dkossenkov/Documents/Private files/AI/Oura-v2" && python3 -c "import 
 
 - [ ] **Step 3:** Закоммитить и запушить:
 ```bash
-cd "/Users/dkossenkov/Documents/Private files/AI/Oura-v2" && git add bot.py && git commit -m "Improve bot onboarding: add /start, inline keyboard, update texts" && git push origin main
+cd "$PROJECT_ROOT" && git add bot.py && git commit -m "Improve bot onboarding: add /start, inline keyboard, update texts" && git push origin main
 ```
 
 - [ ] **Step 4:** Дождаться редеплоя на Render, снова написать `/start` — проверить финальный результат

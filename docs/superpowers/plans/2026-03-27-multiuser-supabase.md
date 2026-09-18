@@ -23,7 +23,7 @@
 
 - [ ] **Step 1:** Инициализировать git-репозиторий в папке `Oura-v2/`
   ```bash
-  cd "/Users/dkossenkov/Documents/Private files/AI/Oura-v2"
+  cd "$PROJECT_ROOT"
   git init
   ```
 

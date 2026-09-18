@@ -704,6 +704,6 @@ init();
 
 ### Task 5: Commit
 
-- [ ] `git -C "/Users/dkossenkov/Documents/Private files/AI/Oura-v2" add dashboard/`
-- [ ] `git -C "/Users/dkossenkov/Documents/Private files/AI/Oura-v2" commit -m "feat: add dashboard scaffold with mock data"`
+- [ ] `git -C "$PROJECT_ROOT" add dashboard/`
+- [ ] `git -C "$PROJECT_ROOT" commit -m "feat: add dashboard scaffold with mock data"`
 - [ ] Убедиться что коммит прошёл: `git log --oneline -1`
