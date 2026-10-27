@@ -13,24 +13,32 @@
 
 ## Этап 0 — доступ и разведка
 
-- [ ] Создать GCP-проект, включить `health.googleapis.com`, настроить consent screen
-- [ ] Перевести OAuth-приложение в статус `In production` (иначе refresh token живёт 7 дней)
+- [x] Создать GCP-проект, включить `health.googleapis.com`, настроить consent screen
+- [x] Опубликовать политику конфиденциальности — без неё Google не отдаёт production
+- [x] Перевести OAuth-приложение в статус `In production` (иначе refresh token живёт 7 дней)
 - [ ] Создать OAuth client, положить `GOOGLE_CLIENT_ID` и `GOOGLE_CLIENT_SECRET` в `.env`
-- [ ] Прогнать `google_health_auth.py`, получить refresh token
-- [ ] Прогнать `google_health_probe.py`, разобрать `probe_output/`
-- [ ] Зафиксировать результат разведки: какие типы доступны, глубина истории,
-      есть ли скин-температура, реальная структура `sleep.stages[]`
+- [x] Прогнать `google_health_auth.py`, получить refresh token
+- [x] Прогнать `google_health_probe.py`, разобрать `probe_output/`
+- [x] Зафиксировать результат разведки — `docs/fitbit-migration/01-probe-results.md`
+- [ ] Через 8 дней после авторизации проверить, что refresh token жив.
+      Если `invalid_grant` — значит production-статус не спас и нужен план Б
+      (верификация с CASA либо еженедельная переавторизация)
 
 ## Этап 1 — формула скоров
 
-Проектируется только после этапа 0: веса зависят от того, какие метрики приходят
-стабильно, а какие с пропусками.
+**Сдвинут на конец ноября.** Разведка показала, что браслет носится с 24.10:
+ряд HRV, температуры и дыхания — три дня. Калибровать формулу не на чем,
+сначала надо накопить данные, поэтому порядок работ теперь 2 → 3 → 1 → 5.
 
+- [x] Проверить, остаётся ли `temperature_spike` — да, через
+      `daily-sleep-temperature-derivations`
 - [ ] Выбрать входы readiness (HRV, RHR, длительность и стадии сна, дыхание)
-- [ ] Описать формулу относительно медианы 30 дней, зафиксировать в документе
+- [ ] Использовать готовые baseline Google (`baselineTemperatureCelsius`,
+      `heartRateVariabilityPersonalRange`, `restingHeartRatePersonalRange`)
+      вместо собственных медиан там, где они есть
+- [ ] Описать формулу, зафиксировать в документе
 - [ ] Решить судьбу правил без источника: `readiness_low`, `sleep_crash`,
       `sleep_trend_down`, `stress_balance_worsening`
-- [ ] Проверить, остаётся ли `temperature_spike` (зависит от скин-температуры у Air)
 
 ## Этап 2 — схема данных
 
@@ -40,12 +48,19 @@
 
 ## Этап 3 — сбор данных
 
+Приоритет номер один: чем раньше запустится сбор, тем раньше накопится baseline.
+
 - [ ] `fitbit_update.py`: обмен refresh token на access token, обход типов, upsert
+- [ ] Дневные агрегаты через `:dailyRollUp` для `steps`, `distance`, `heart-rate`,
+      `total-calories`, `sedentary-period`, `active-zone-minutes` — они поминутные,
+      `:list` для них не годится
+- [ ] Проверить `dataSourceFamily`: отделяет ли он браслет от шагов с телефона
+- [ ] Агрегация `sleep`, когда за сутки несколько записей (ночь + дневной сон)
 - [ ] Пагинация для `sleep` и `exercise` (максимум 25 записей на страницу)
-- [ ] Расчёт скоров при записи дня
 - [ ] GitHub Actions workflow + секреты `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
       `GOOGLE_HEALTH_REFRESH_TOKEN`
 - [ ] Бэкфилл истории на максимальную доступную глубину
+- [ ] Расчёт скоров при записи дня — после этапа 1
 
 ## Этап 4 — онбординг через бота
 
