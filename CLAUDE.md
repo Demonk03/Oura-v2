@@ -206,7 +206,17 @@ Fitbit Web API отключается 02.11.2026. Замена — Google Health
 |---|---|
 | `google_health_auth.py` | разовый локальный OAuth-флоу, пишет refresh token в `.env` |
 | `google_health_probe.py` | разведка data types, сырые ответы в `probe_output/` (gitignored) |
+| `fitbit_update.py` | ежедневный сбор в `fitbit_logs`, workflow `fitbit_update.yml` в 09:00 UTC |
 | `docs/fitbit-migration/` | инструкция по настройке GCP и находки по API |
+
+Refresh token хранится в `users.google_refresh_token`, в секретах GitHub его нет —
+там только `GOOGLE_CLIENT_ID` и `GOOGLE_CLIENT_SECRET`.
+
+Каждый прогон перезабирает последние 7 дней: Google досчитывает HRV, температуру
+и дыхание задним числом, поэтому запись за сегодня к утру неполная.
+
+Активность собирается только с `users/me/dataSourceFamilies/google-wearables` —
+без этого фильтра в ряд попадают шаги с телефона.
 
 Ключевые ограничения, которые определяют архитектуру:
 
