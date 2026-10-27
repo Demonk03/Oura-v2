@@ -7,9 +7,11 @@
 
 ## Что это
 
-Личный health-трекер. Собирает данные с кольца Oura Ring через API, хранит в Supabase (PostgreSQL), отправляет алерты и weekly-дайджест в Telegram через GPT-анализ. Фронтенд — статичный дашборд на GitHub Pages.
+Личный health-трекер. Собирает данные с носимого устройства через API, хранит в Supabase (PostgreSQL), отправляет алерты и weekly-дайджест в Telegram через GPT-анализ. Фронтенд — статичный дашборд на GitHub Pages.
 
 Поддерживает до 5 независимых пользователей. Регистрация — через Telegram-бот.
+
+**Октябрь 2026: идёт переход с Oura Ring на Google Fitbit Air.** Oura-ветка работает и остаётся. Fitbit-ветка в разработке — план в `plan.md`, контекст API в `docs/fitbit-migration/00-google-health-setup.md`.
 
 ---
 
@@ -139,6 +141,9 @@ Secrets в репозитории: `SUPABASE_URL`, `SUPABASE_KEY`, `OPENAI_API_K
 | `OPENAI_API_KEY` | alert_checker.py, send_telegram_message.py |
 | `APP_SECRET` | bot.py — подпись JWT дашборда (32 байта hex) |
 | `DASHBOARD_ORIGIN` | bot.py — CORS origin (default: `https://demonk03.github.io`) |
+| `GOOGLE_CLIENT_ID` | google_health_auth.py, google_health_probe.py |
+| `GOOGLE_CLIENT_SECRET` | google_health_auth.py, google_health_probe.py |
+| `GOOGLE_HEALTH_REFRESH_TOKEN` | google_health_probe.py (пишется скриптом авторизации) |
 
 Генерация APP_SECRET: `python3 -c "import secrets; print(secrets.token_hex(32))"`
 
@@ -192,9 +197,39 @@ python3 bot.py                    # запуск бота локально (webh
 
 ---
 
+## Fitbit Air / Google Health API
+
+Fitbit Web API отключается 02.11.2026. Замена — Google Health API
+(`https://health.googleapis.com/v4`), OAuth 2.0 от Google вместо PAT.
+
+| Файл | Назначение |
+|---|---|
+| `google_health_auth.py` | разовый локальный OAuth-флоу, пишет refresh token в `.env` |
+| `google_health_probe.py` | разведка data types, сырые ответы в `probe_output/` (gitignored) |
+| `docs/fitbit-migration/` | инструкция по настройке GCP и находки по API |
+
+Ключевые ограничения, которые определяют архитектуру:
+
+- **Скоров в API нет.** Ни sleep score, ни readiness, ни cardio load, ни stress —
+  это app-level метрики Google Health. Доступны сырые: `sleep` (стадии, efficiency),
+  `heart-rate-variability`, `daily-resting-heart-rate`, `daily-oxygen-saturation`,
+  `daily-respiratory-rate`, `steps`, `active-zone-minutes`, `exercise` и прочие.
+  Скоры считаем сами из медианных baseline
+- **OAuth-приложение должно быть `In production`.** В статусе `Testing` refresh token
+  истекает через 7 дней, крон умирает с `invalid_grant`
+- `pageSize` для `sleep` и `exercise` — максимум 25, нужна пагинация
+- Шесть типов не поддерживают `:list`, только rollup: `floors`, `total-calories`,
+  `active-minutes`, `calories-in-heart-rate-zone`, `time-in-heart-rate-zone`,
+  `daily-heart-rate-zones`
+
+Данные Oura и Fitbit не смешиваются: Fitbit пишется в отдельную таблицу `fitbit_logs`,
+`health_logs` сохраняет историю Oura с февраля 2026. Шкалы скоров несравнимы.
+
+---
+
 ## Статус реализации
 
-Всё реализовано. Планы из `docs/superpowers/plans/` выполнены по состоянию на 2026-03-29:
+Oura-ветка реализована полностью. Планы из `docs/superpowers/plans/` выполнены по состоянию на 2026-03-29:
 - Мультипользовательская архитектура (Supabase)
 - Онбординг бота (/start с inline-кнопкой)
 - Дашборд (login + index + CSS + JS)

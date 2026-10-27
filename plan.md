@@ -1,0 +1,75 @@
+# План: переход с Oura Ring на Fitbit Air
+
+Контекст и находки по API — `docs/fitbit-migration/00-google-health-setup.md`.
+
+## Решения
+
+- Живём в этом же репозитории, рядом с Oura-данными. Новая таблица `fitbit_logs`,
+  `health_logs` с историей Oura с февраля 2026 не трогаем
+- Источник — Google Health API напрямую (не Apple Health, не агрегатор).
+  Apple Health отпадает: Google Health не пишет в HealthKit HRV и скин-температуру
+- Композитных скоров в API нет — считаем свои из сырых метрик
+- Oura-ветка остаётся работоспособной, пока оба устройства живы
+
+## Этап 0 — доступ и разведка
+
+- [ ] Создать GCP-проект, включить `health.googleapis.com`, настроить consent screen
+- [ ] Перевести OAuth-приложение в статус `In production` (иначе refresh token живёт 7 дней)
+- [ ] Создать OAuth client, положить `GOOGLE_CLIENT_ID` и `GOOGLE_CLIENT_SECRET` в `.env`
+- [ ] Прогнать `google_health_auth.py`, получить refresh token
+- [ ] Прогнать `google_health_probe.py`, разобрать `probe_output/`
+- [ ] Зафиксировать результат разведки: какие типы доступны, глубина истории,
+      есть ли скин-температура, реальная структура `sleep.stages[]`
+
+## Этап 1 — формула скоров
+
+Проектируется только после этапа 0: веса зависят от того, какие метрики приходят
+стабильно, а какие с пропусками.
+
+- [ ] Выбрать входы readiness (HRV, RHR, длительность и стадии сна, дыхание)
+- [ ] Описать формулу относительно медианы 30 дней, зафиксировать в документе
+- [ ] Решить судьбу правил без источника: `readiness_low`, `sleep_crash`,
+      `sleep_trend_down`, `stress_balance_worsening`
+- [ ] Проверить, остаётся ли `temperature_spike` (зависит от скин-температуры у Air)
+
+## Этап 2 — схема данных
+
+- [ ] Таблица `fitbit_logs`: UNIQUE(user_id, date), сырые метрики + вычисленные скоры
+- [ ] В `users` добавить `google_refresh_token`, `google_user_id`, `source`
+- [ ] Маркер неполной записи по аналогии с `activity_score IS NULL` у Oura
+
+## Этап 3 — сбор данных
+
+- [ ] `fitbit_update.py`: обмен refresh token на access token, обход типов, upsert
+- [ ] Пагинация для `sleep` и `exercise` (максимум 25 записей на страницу)
+- [ ] Расчёт скоров при записи дня
+- [ ] GitHub Actions workflow + секреты `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+      `GOOGLE_HEALTH_REFRESH_TOKEN`
+- [ ] Бэкфилл истории на максимальную доступную глубину
+
+## Этап 4 — онбординг через бота
+
+- [ ] `/auth/google/start` и `/auth/google/callback` в `bot.py`
+- [ ] Добавить `https://oura-v2.onrender.com/auth/google/callback` в OAuth client
+- [ ] Заменить `/register <token>` на кнопку «Подключить Fitbit»
+- [ ] Обработка отозванного токена: `invalid_grant` → уведомление в Telegram
+
+## Этап 5 — алерты, дайджест, дашборд
+
+- [ ] `alert_checker.py` на новые поля и новые скоры
+- [ ] `gpt_table_analyzer.py`: новый набор колонок для weekly
+- [ ] `dashboard.js`: графики по Fitbit-метрикам, переключение источника
+- [ ] Проверить, что Oura-ветка не сломалась
+
+## Отложено
+
+- [ ] Webhook-подписки Google Health вместо ежедневного polling
+- [ ] Регистрация `Oura-v2` в реестре скилла `sync-ticktick` (нет TickTick project ID)
+
+## Риски
+
+- Google второй год перетряхивает API: Google Fit → Fitbit Web API → Google Health API,
+  `v4beta` открыт 01.10.2026. Ещё одна миграция в пределах года вероятна
+- Если глубина истории мала, медианные baseline заработают только через месяц носки,
+  и первый месяц алерты будут шумить
+- Неверифицированное приложение: лимит 100 пользователей, consent-экран с предупреждением
