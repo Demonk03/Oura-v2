@@ -42,24 +42,27 @@
 
 ## Этап 2 — схема данных
 
-- [ ] Таблица `fitbit_logs`: UNIQUE(user_id, date), сырые метрики + вычисленные скоры
-- [ ] В `users` добавить `google_refresh_token`, `google_user_id`, `source`
-- [ ] Маркер неполной записи по аналогии с `activity_score IS NULL` у Oura
+- [x] Таблица `fitbit_logs`: UNIQUE(user_id, date), сырые метрики + вычисленные скоры
+- [x] В `users` добавить `google_refresh_token`, `google_health_user_id`, `source`
+- [x] Маркер неполной записи не нужен: каждый прогон перезабирает последние 7 дней
 
 ## Этап 3 — сбор данных
 
 Приоритет номер один: чем раньше запустится сбор, тем раньше накопится baseline.
 
-- [ ] `fitbit_update.py`: обмен refresh token на access token, обход типов, upsert
-- [ ] Дневные агрегаты через `:dailyRollUp` для `steps`, `distance`, `heart-rate`,
+- [x] `fitbit_update.py`: обмен refresh token на access token, обход типов, upsert
+- [x] Дневные агрегаты через `:dailyRollUp` для `steps`, `distance`, `heart-rate`,
       `total-calories`, `sedentary-period`, `active-zone-minutes` — они поминутные,
       `:list` для них не годится
-- [ ] Проверить `dataSourceFamily`: отделяет ли он браслет от шагов с телефона
-- [ ] Агрегация `sleep`, когда за сутки несколько записей (ночь + дневной сон)
-- [ ] Пагинация для `sleep` и `exercise` (максимум 25 записей на страницу)
-- [ ] GitHub Actions workflow + секреты `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
-      `GOOGLE_HEALTH_REFRESH_TOKEN`
-- [ ] Бэкфилл истории на максимальную доступную глубину
+- [x] Проверить `dataSourceFamily` — да, отделяет. Активность собирать только
+      с `users/me/dataSourceFamilies/google-wearables`
+- [x] Агрегация `sleep`, когда за сутки несколько записей: самая длинная сессия
+      идёт в основные поля, остальные считаются как naps
+- [x] GitHub Actions workflow + секреты `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
+      Refresh token в секретах не нужен, он читается из `users`
+- [x] Бэкфилл: собраны все доступные дни (24–27.10), больше в API нет
+- [ ] Пагинация для `sleep` и `exercise` — сейчас берётся одна страница на 25
+      записей. Хватает для окна в 7 дней, понадобится при длинной истории
 - [ ] Расчёт скоров при записи дня — после этапа 1
 
 ## Этап 4 — онбординг через бота
@@ -75,6 +78,15 @@
 - [ ] `gpt_table_analyzer.py`: новый набор колонок для weekly
 - [ ] `dashboard.js`: графики по Fitbit-метрикам, переключение источника
 - [ ] Проверить, что Oura-ветка не сломалась
+
+## Tennis Coach зависит от Oura — починить отдельно
+
+База общая. У `match_prep` внешний ключ на `health_logs` и колонки
+`oura_readiness`, `oura_sleep_score`, `oura_hrv`, `oura_is_stale`. Когда кольцо
+перестанет носиться, теннисный тренер молча встанет на устаревших данных.
+
+- [ ] Решить, переводить ли `match_prep` на `fitbit_logs` или на общий слой
+- [ ] Задача живёт в проекте `tennis-coach`, не здесь
 
 ## Отложено
 

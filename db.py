@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -75,6 +77,40 @@ def get_latest_health_log(user_id: str) -> dict | None:
         .execute()
     )
     return response.data[0] if response.data else None
+
+
+def get_fitbit_users() -> list[dict]:
+    """Активные пользователи, подключившие Google Health."""
+    client = get_client()
+    response = (
+        client.table("users")
+        .select("*")
+        .eq("is_active", True)
+        .not_.is_("google_refresh_token", "null")
+        .execute()
+    )
+    return response.data
+
+
+def upsert_fitbit_log(user_id: str, date: str, fields: dict) -> None:
+    """Вставляет или обновляет запись fitbit_logs для user_id + date."""
+    client = get_client()
+    data = {"user_id": user_id, "date": date, **fields}
+    client.table("fitbit_logs").upsert(data, on_conflict="user_id,date").execute()
+
+
+def get_fitbit_logs(user_id: str, days: int = 30) -> list[dict]:
+    start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    client = get_client()
+    response = (
+        client.table("fitbit_logs")
+        .select("*")
+        .eq("user_id", user_id)
+        .gte("date", start_date)
+        .order("date")
+        .execute()
+    )
+    return response.data
 
 
 def get_weekly_summary(user_id: str) -> dict | None:
