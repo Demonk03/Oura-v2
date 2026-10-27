@@ -22,14 +22,22 @@ Operational reference for setting up and maintaining Oura-v2.
 ### users
 ```sql
 CREATE TABLE users (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  telegram_id  BIGINT UNIQUE NOT NULL,
-  oura_pat     TEXT NOT NULL,
-  timezone     TEXT NOT NULL DEFAULT 'Europe/Moscow',
-  is_active    BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  telegram_id            BIGINT UNIQUE NOT NULL,
+  oura_pat               TEXT NOT NULL,
+  timezone               TEXT NOT NULL DEFAULT 'Europe/Moscow',
+  is_active              BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- Fitbit / Google Health, добавлено 27.10.2026
+  google_refresh_token   TEXT,
+  google_health_user_id  TEXT,
+  source                 TEXT NOT NULL DEFAULT 'oura'
 );
 ```
+
+`google_refresh_token` хранится здесь, а не в секретах GitHub: токен привязан
+к пользователю, а не к инсталляции. В секретах лежат только `GOOGLE_CLIENT_ID`
+и `GOOGLE_CLIENT_SECRET`.
 
 ### health_logs
 ```sql
@@ -100,6 +108,53 @@ CREATE TABLE weekly_summaries (
   UNIQUE(user_id, week_start)
 );
 ```
+
+### fitbit_logs
+
+Данные Fitbit Air через Google Health API. Отдельная таблица, а не расширение
+`health_logs`: набор метрик другой, а шкалы скоров несравнимы, и смешивать два
+определения «sleep score» в одной колонке означало бы испортить и историю Oura,
+и расчёт базовых линий.
+
+Одна строка — один день, `UNIQUE(user_id, date)` под upsert. 52 колонки:
+
+| Группа | Колонки |
+|---|---|
+| Сон | `sleep_start`, `sleep_end`, `time_in_bed`, `total_sleep_duration`, `awake_time`, `light_sleep_duration`, `deep_sleep_duration`, `rem_sleep_duration`, `nap_count`, `nap_duration` |
+| Вегетатика | `average_hrv`, `deep_sleep_rmssd`, `hrv_entropy`, `non_rem_hr`, `resting_hr`, `resting_hr_method`, `average_breath`, `breath_deep`, `breath_light`, `breath_rem`, `spo2_average`, `spo2_min`, `spo2_max` |
+| Температура | `nightly_temp`, `baseline_temp`, `temp_rel_stddev_30d`, `temperature_deviation` |
+| Активность | `steps`, `distance_m`, `total_calories`, `active_calories`, `sedentary_time`, `azm_fat_burn`, `azm_cardio`, `azm_peak`, `hr_avg`, `hr_min`, `hr_max`, `vo2_max`, `cardio_fitness_level` |
+| Тренировки | `workout_count`, `workout_types`, `workout_calories`, `workout_distance`, `workout_duration` |
+| Свои скоры | `readiness_score`, `sleep_score`, `activity_score` — заполняются позже |
+
+Маркера неполной записи нет намеренно. У Oura эту роль играет
+`activity_score IS NULL`, здесь вместо этого каждый прогон перезабирает последние
+7 дней: Google досчитывает HRV, температуру и дыхание задним числом, и поймать
+это маркером сложнее, чем просто перезаписать свежий хвост.
+
+---
+
+## Google Health API
+
+Base URL: `https://health.googleapis.com/v4`
+
+Настройка доступа — `docs/fitbit-migration/00-google-health-setup.md`,
+результаты разведки по типам данных — `01-probe-results.md`.
+
+Грабли, на которые уже наступили:
+
+- **Скоров нет.** Ни sleep score, ни readiness, ни cardio load, ни stress
+- **Статус OAuth-приложения должен быть `In production`.** В `Testing` refresh
+  token живёт 7 дней, и ежедневный workflow умирает с `invalid_grant`
+- **Активность фильтровать по источнику.** Без
+  `users/me/dataSourceFamilies/google-wearables` в ряд попадают шаги с телефона
+- **Поминутные типы только через `:dailyRollUp`.** Тело запроса — `range.start` /
+  `range.end`, а не `startTime` / `endTime`; в документации формы нет, она добыта
+  из discovery-документа
+- **`NaN` в ответах.** `baselineTemperatureCelsius` приходит как `NaN`, пока
+  не накоплена история. JSON это допускает, Supabase — нет, поэтому нечисловые
+  значения пишутся как `NULL`
+- **`pageSize` для `sleep` и `exercise` — максимум 25**
 
 ---
 
@@ -178,7 +233,11 @@ Workflows:
 |---|---|---|
 | `.github/workflows/update.yml` | `0 7 * * *` | `update_missing_dates.py` |
 | `.github/workflows/alert_check.yml` | `30 7 * * *` | `alert_checker.py` |
+| `.github/workflows/fitbit_update.yml` | `0 9 * * *` | `fitbit_update.py` |
 | `.github/workflows/send_telegram_weekly.yml` | `0 21 * * 0` | `send_telegram_message.py` |
+
+Сбор Fitbit стоит позже сбора Oura намеренно: Google досчитывает ночные HRV,
+температуру и частоту дыхания только к середине дня.
 
 All workflows can be triggered manually via `workflow_dispatch` in the Actions tab.
 
@@ -232,11 +291,27 @@ SUPABASE_KEY=...       # sb_secret_... (service_role)
 OPENAI_API_KEY=...
 TG_TOKEN=...
 APP_SECRET=...         # python3 -c "import secrets; print(secrets.token_hex(32))"
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_HEALTH_REFRESH_TOKEN=...   # пишется скриптом google_health_auth.py
+```
+
+Значения без кавычек. Загрузчик кавычки срежет, но при переносе в секреты
+GitHub они уедут как есть и дадут `invalid_client`.
+
+**Python.** Системный интерпретатор на маке — 3.9, а код написан под 3.11
+(в Actions используется именно он). Локально нужен venv:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 ```
 
 Run data update manually:
 ```bash
-python3 update_missing_dates.py
+python3 update_missing_dates.py    # Oura
+python3 fitbit_update.py           # Fitbit, последние 7 дней
+python3 fitbit_update.py --days 30 # другое окно
 ```
 
 Run bot locally (for testing):
