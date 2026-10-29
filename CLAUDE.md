@@ -206,7 +206,7 @@ Fitbit Web API отключается 02.11.2026. Замена — Google Health
 |---|---|
 | `google_health_auth.py` | разовый локальный OAuth-флоу, пишет refresh token в `.env` |
 | `google_health_probe.py` | разведка data types, сырые ответы в `probe_output/` (gitignored) |
-| `fitbit_update.py` | ежедневный сбор в `fitbit_logs`, workflow `fitbit_update.yml` в 09:00 UTC |
+| `fitbit_update.py` | ежедневный сбор в `fitbit_logs` и `fitbit_workouts`, workflow `fitbit_update.yml` в 09:00 UTC |
 | `docs/fitbit-migration/` | инструкция по настройке GCP и находки по API |
 
 Refresh token хранится в `users.google_refresh_token`, в секретах GitHub его нет —
@@ -227,13 +227,32 @@ Refresh token хранится в `users.google_refresh_token`, в секрет�
   Скоры считаем сами из медианных baseline
 - **OAuth-приложение должно быть `In production`.** В статусе `Testing` refresh token
   истекает через 7 дней, крон умирает с `invalid_grant`
-- `pageSize` для `sleep` и `exercise` — максимум 25, нужна пагинация
+- `pageSize` для `sleep` и `exercise` — максимум 25, а пагинация у них сломана:
+  `nextPageToken` приходит значением вида `5`, и на него же API отвечает
+  400 `Invalid page token`. Окно берётся посуточными запросами с параметром
+  `filter` (`exercise.interval.civil_start_time`, `sleep.interval.civil_end_time`) —
+  он есть только в discovery-документе, в документации его нет
+- Google отдаёт разовые 503 на серии запросов — в `_api` ретрай на 5xx
 - Шесть типов не поддерживают `:list`, только rollup: `floors`, `total-calories`,
   `active-minutes`, `calories-in-heart-rate-zone`, `time-in-heart-rate-zone`,
   `daily-heart-rate-zones`
 
 Данные Oura и Fitbit не смешиваются: Fitbit пишется в отдельную таблицу `fitbit_logs`,
 `health_logs` сохраняет историю Oura с февраля 2026. Шкалы скоров несравнимы.
+
+### Таблица `fitbit_workouts`
+
+Строка на тренировку, UNIQUE по `source_point_name` — имени dataPoint в API,
+поэтому перезабор окна идемпотентен. Дневной агрегат в `fitbit_logs`
+(`workout_types`, `workout_duration`) остаётся, но он слипает теннис с ходьбой:
+для разбора отдельной сессии годится только `fitbit_workouts`.
+
+Перекрывающиеся записи не схлопываются: ручная отметка в приложении и автодетект
+одного занятия приходят разными dataPoint'ами, различать на чтении
+по `recording_method` (`MANUAL` / `PASSIVELY_MEASURED`).
+
+Таблицу читает только Oura-v2. `tennis-coach` живёт в той же базе, но в неё
+не ходит — решение зафиксировано в `plan.md`.
 
 ---
 

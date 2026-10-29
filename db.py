@@ -99,6 +99,17 @@ def upsert_fitbit_log(user_id: str, date: str, fields: dict) -> None:
     client.table("fitbit_logs").upsert(data, on_conflict="user_id,date").execute()
 
 
+def upsert_fitbit_workouts(user_id: str, rows: list[dict]) -> int:
+    """Отдельные тренировки. Конфликт разрешается по source_point_name —
+    имени dataPoint в API, поэтому перезабор окна переписывает те же строки."""
+    if not rows:
+        return 0
+    client = get_client()
+    data = [{"user_id": user_id, **row} for row in rows]
+    client.table("fitbit_workouts").upsert(data, on_conflict="source_point_name").execute()
+    return len(data)
+
+
 def get_fitbit_logs(user_id: str, days: int = 30) -> list[dict]:
     start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     client = get_client()

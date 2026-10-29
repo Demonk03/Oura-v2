@@ -11,6 +11,7 @@ import argparse
 import json
 import math
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -65,8 +66,16 @@ def _api(token: str, path: str, body: dict | None = None) -> dict:
         data = json.dumps(body).encode()
     req = urllib.request.Request(f"{BASE}{path}", data=data, headers=headers,
                                  method="POST" if body is not None else "GET")
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return json.load(resp)
+    # Google отдаёт разовые 503 на серии запросов. Крон ходит раз в сутки,
+    # поэтому неповторённая ошибка стоит потерянного дня.
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return json.load(resp)
+        except urllib.error.HTTPError as error:
+            if error.code < 500 or attempt == 2:
+                raise
+            time.sleep(2 ** attempt)
 
 
 def fetch_list(token: str, data_type: str, page_size: int = 100) -> list:
@@ -74,6 +83,39 @@ def fetch_list(token: str, data_type: str, page_size: int = 100) -> list:
     к типу, поэтому берём последнюю страницу и отсекаем по дате на своей стороне."""
     path = f"/users/me/dataTypes/{data_type}/dataPoints?pageSize={page_size}"
     return _api(token, path).get("dataPoints") or []
+
+
+def fetch_sessions(token: str, data_type: str, days: set, time_field: str) -> list:
+    """Посуточный :list для sleep и exercise. У этих двух типов pageSize жёстко
+    ограничен 25, и в окно из WINDOW_DAYS записи не влезают: четырёх прогулок
+    в день хватает, чтобы вытеснить теннис за пределы страницы.
+
+    Лечится не пагинацией, а фильтром по гражданскому времени (параметр filter
+    описан в discovery-документе, в самой документации его нет). Запрос на сутки
+    держит ответ заведомо ниже лимита, поэтому вторая страница не нужна.
+
+    Пагинация для этих типов всё равно нерабочая: API возвращает nextPageToken
+    значением вида '5' и на него же отвечает 400 Invalid page token."""
+    out = []
+    for day in sorted(days):
+        nxt = (date_cls.fromisoformat(day) + timedelta(days=1)).isoformat()
+        expr = (f'{data_type}.interval.{time_field} >= "{day}" AND '
+                f'{data_type}.interval.{time_field} < "{nxt}"')
+        path = (f"/users/me/dataTypes/{data_type}/dataPoints"
+                f"?pageSize=25&filter={urllib.parse.quote(expr)}")
+        out.extend(_api(token, path).get("dataPoints") or [])
+    return out
+
+
+def _exercise_day(pt: dict) -> str:
+    iv = ((pt.get("exercise") or {}).get("interval")) or {}
+    return _civil_date(iv["startTime"], iv.get("startUtcOffset")) if iv.get("startTime") else ""
+
+
+def _sleep_day(pt: dict) -> str:
+    """Запись относится к дате пробуждения."""
+    iv = ((pt.get("sleep") or {}).get("interval")) or {}
+    return _civil_date(iv["endTime"], iv.get("endUtcOffset")) if iv.get("endTime") else ""
 
 
 def fetch_daily_rollup(token: str, data_type: str, start: date_cls, end: date_cls) -> list:
@@ -102,6 +144,11 @@ def _civil_date(iso_time: str, utc_offset: str) -> str:
 
 def _int(v):
     return int(float(v)) if v is not None else None
+
+
+def _seconds(v):
+    """Длительности приходят строкой вида '6300s'."""
+    return int(float(v.rstrip("s"))) if v else None
 
 
 def _num(v):
@@ -204,14 +251,8 @@ def collect_sleep(token: str, days: set) -> dict:
     Самая длинная идёт в основные поля, остальные считаются как naps.
     Запись относится к дате пробуждения."""
     by_day = defaultdict(list)
-    for pt in fetch_list(token, "sleep", page_size=25):
-        s = pt.get("sleep") or {}
-        iv = s.get("interval") or {}
-        if not iv.get("endTime"):
-            continue
-        d = _civil_date(iv["endTime"], iv.get("endUtcOffset"))
-        if d in days:
-            by_day[d].append(s)
+    for pt in fetch_sessions(token, "sleep", days, "civil_end_time"):
+        by_day[_sleep_day(pt)].append(pt["sleep"])
 
     out = {}
     for d, sessions in by_day.items():
@@ -247,16 +288,50 @@ def collect_sleep(token: str, days: set) -> dict:
     return out
 
 
-def collect_workouts(token: str, days: set) -> dict:
+def _workout_row(pt: dict, e: dict, iv: dict) -> dict:
+    src = pt.get("dataSource") or {}
+    device = src.get("device") or {}
+    m = e.get("metricsSummary") or {}
+    zones = m.get("heartRateZoneDurations") or {}
+    mm = _int(m.get("distanceMillimeters"))
+    return {
+        "source_point_name": pt["name"],
+        "start_time": iv["startTime"],
+        "end_time": iv["endTime"],
+        "utc_offset_seconds": _seconds(iv.get("startUtcOffset")),
+        "active_duration_seconds": _seconds(e.get("activeDuration")),
+        "exercise_type": e.get("exerciseType") or "UNKNOWN",
+        "display_name": e.get("displayName"),
+        # Ручная отметка и автодетект одного занятия приходят разными точками.
+        # Не схлопываем: различать на чтении по recording_method.
+        "recording_method": src.get("recordingMethod"),
+        "device_form_factor": device.get("formFactor"),
+        "device_name": device.get("displayName"),
+        "avg_hr": _int(m.get("averageHeartRateBeatsPerMinute")),
+        "active_zone_minutes": _int(m.get("activeZoneMinutes")),
+        "hr_light_seconds": _seconds(zones.get("lightTime")),
+        "hr_moderate_seconds": _seconds(zones.get("moderateTime")),
+        "hr_vigorous_seconds": _seconds(zones.get("vigorousTime")),
+        "hr_peak_seconds": _seconds(zones.get("peakTime")),
+        "calories_kcal": _int(m.get("caloriesKcal")),
+        "steps": _int(m.get("steps")),
+        "distance_m": mm // 1000 if mm is not None else None,
+        "avg_pace_sec_per_m": _num(m.get("averagePaceSecondsPerMeter")),
+    }
+
+
+def collect_workouts(token: str, days: set) -> tuple[dict, list]:
+    """Возвращает дневной агрегат для fitbit_logs и отдельные строки
+    для fitbit_workouts: в агрегате теннис слит с ходьбой, в строках — нет."""
     by_day = defaultdict(list)
-    for pt in fetch_list(token, "exercise", page_size=25):
+    rows = []
+    for pt in fetch_sessions(token, "exercise", days, "civil_start_time"):
         e = pt.get("exercise") or {}
         iv = e.get("interval") or {}
-        if not iv.get("startTime"):
+        if not (iv.get("startTime") and iv.get("endTime")):
             continue
-        d = _civil_date(iv["startTime"], iv.get("startUtcOffset"))
-        if d in days:
-            by_day[d].append(e)
+        by_day[_exercise_day(pt)].append(e)
+        rows.append(_workout_row(pt, e, iv))
 
     out = {}
     for d, items in by_day.items():
@@ -274,7 +349,7 @@ def collect_workouts(token: str, days: set) -> dict:
             "workout_distance": sum(_int(s.get("distanceMillimeters")) or 0 for s in summaries) // 1000,
             "workout_duration": total_seconds,
         }
-    return out
+    return out, rows
 
 
 def run_for_user(user: dict, window_days: int) -> int:
@@ -283,11 +358,15 @@ def run_for_user(user: dict, window_days: int) -> int:
     start = date_cls.today() - timedelta(days=window_days - 1)
     days = {(start + timedelta(days=i)).isoformat() for i in range((end - start).days)}
 
+    workout_days, workout_rows = collect_workouts(token, days)
+
     merged = defaultdict(dict)
     for part in (collect_daily(token, days), collect_rollups(token, start, end),
-                 collect_sleep(token, days), collect_workouts(token, days)):
+                 collect_sleep(token, days), workout_days):
         for d, fields in part.items():
             merged[d].update(fields)
+
+    print(f"  тренировок: {db.upsert_fitbit_workouts(user['id'], workout_rows)}")
 
     written = 0
     for d in sorted(merged):
